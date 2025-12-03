@@ -6,7 +6,7 @@ PySide6>=6.8.0,<6.9.0
 tkinter-tooltip>=2.1.0,<3.0.0
 
 # Image Processing & OCR
-opencv-python>=4.10.0,<4.11.0
+opencv-python>=4.10.0,<4.13.0
 numpy>=1.26.0,<2.0.0
 Pillow>=10.4.0,<11.0.0
 tesserocr>=2.7.1,<3.0.0
