@@ -2,7 +2,7 @@
 # Pinned to secure, stable versions as of December 2025
 
 # GUI Frameworks
-PySide6>=6.8.0,<6.9.0
+PySide6>=6.8.0,<6.11.0
 tkinter-tooltip>=2.1.0,<3.0.0
 
 # Image Processing & OCR
