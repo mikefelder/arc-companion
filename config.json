@@ -1,0 +1,6 @@
+{
+  "update_server": "https://ghostworld073.pythonanywhere.com",
+  "max_download_size_mb": 500,
+  "enable_hash_verification": true,
+  "connection_timeout_seconds": 30
+}

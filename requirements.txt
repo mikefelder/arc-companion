@@ -1,0 +1,25 @@
+# ARC Companion Dependencies
+# Pinned to secure, stable versions as of December 2025
+
+# GUI Frameworks
+PySide6>=6.8.0,<6.9.0
+tkinter-tooltip>=2.1.0,<3.0.0
+
+# Image Processing & OCR
+opencv-python>=4.10.0,<4.11.0
+numpy>=1.26.0,<2.0.0
+Pillow>=10.4.0,<11.0.0
+tesserocr>=2.7.1,<3.0.0
+
+# Screen Capture
+mss>=9.0.2,<10.0.0
+
+# Input Handling
+pynput>=1.7.7,<2.0.0
+
+# HTTP Requests
+requests>=2.32.3,<3.0.0
+certifi>=2024.12.14  # Ensures up-to-date CA certificates
+
+# Utilities
+# Note: csv, json, pathlib, ctypes, os, sys, subprocess, ast, re, threading, queue, time, difflib are built-in

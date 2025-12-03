@@ -6,12 +6,39 @@ import os
 import sys
 import shutil
 import threading
+import hashlib
+import subprocess
+import json
+from pathlib import Path
 
 # Global variables
 root = None
 progress_bar = None
 progress_label = None
 download_thread = None
+
+# Load configuration
+CONFIG_PATH = Path(__file__).parent / "config.json"
+DEFAULT_CONFIG = {
+    "update_server": "https://ghostworld073.pythonanywhere.com",
+    "max_download_size_mb": 500,
+    "enable_hash_verification": True,
+    "connection_timeout_seconds": 30
+}
+
+def load_config():
+    """Load configuration from config.json or return defaults."""
+    if CONFIG_PATH.exists():
+        try:
+            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                # Merge with defaults to ensure all keys exist
+                return {**DEFAULT_CONFIG, **config}
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Error loading config: {e}. Using defaults.")
+    return DEFAULT_CONFIG.copy()
+
+CONFIG = load_config()
 
 def center_window(window):
     window.update_idletasks()
@@ -23,7 +50,13 @@ def center_window(window):
 
 def check_for_update(current_version):
     try:
-        response = requests.get("https://ghostworld073.pythonanywhere.com/latest_arc_companion")
+        # Use timeout and verify SSL certificates
+        url = f"{CONFIG['update_server']}/latest_arc_companion"
+        response = requests.get(
+            url,
+            timeout=CONFIG['connection_timeout_seconds'],
+            verify=True
+        )
         response.raise_for_status()  # Check for HTTP errors
         latest_version = response.json()[0]  # Assuming JSON response instead of text eval
         if latest_version != current_version:
@@ -45,11 +78,27 @@ def download_update():
 
 def download_update_thread():
     try:
-        response = requests.get("https://ghostworld073.pythonanywhere.com/download_latest_arc_companion", stream=True)
+        # Download with timeout and SSL verification
+        url = f"{CONFIG['update_server']}/download_latest_arc_companion"
+        response = requests.get(
+            url,
+            stream=True,
+            timeout=CONFIG['connection_timeout_seconds'],
+            verify=True
+        )
         response.raise_for_status()  # Check for HTTP errors
         total_size = int(response.headers.get('content-length', 0))
+        
+        # Validate file size (prevent zip bombs)
+        max_size = CONFIG['max_download_size_mb'] * 1024 * 1024
+        if total_size > max_size:
+            print(f"Update file too large: {total_size} bytes (max: {max_size})")
+            root.after(0, launch_application)
+            return
+        
         block_size = 1024
         downloaded_size = 0
+        sha256_hash = hashlib.sha256()
 
         # Prepare progress bar for the download
         progress_bar['maximum'] = total_size
@@ -57,17 +106,29 @@ def download_update_thread():
         with open("arc_companion_update.zip", "wb") as file:
             for data in response.iter_content(block_size):
                 file.write(data)
+                if CONFIG['enable_hash_verification']:
+                    sha256_hash.update(data)
                 downloaded_size += len(data)
                 # Update progress variables
                 mb_downloaded = downloaded_size / (1024 * 1024)
                 mb_total = total_size / (1024 * 1024)
                 # Schedule UI update
                 root.after(0, update_progress_ui, downloaded_size, total_size, mb_downloaded, mb_total)
+        
+        # Verify downloaded file hash (implement when server provides checksums)
+        if CONFIG['enable_hash_verification']:
+            file_hash = sha256_hash.hexdigest()
+            print(f"Downloaded file SHA256: {file_hash}")
+            # TODO: Verify against expected hash from server
+        
         print("File downloaded and saved as arc_companion_update.zip")
         # Start extraction in a separate thread
         root.after(0, apply_update)
     except requests.RequestException as e:
         print(f"Error downloading update: {e}")
+        root.after(0, launch_application)
+    except Exception as e:
+        print(f"Unexpected error during download: {e}")
         root.after(0, launch_application)
 
 def update_progress_ui(downloaded_size, total_size, mb_downloaded, mb_total):
@@ -90,11 +151,30 @@ def apply_update():
 
 def apply_update_thread():
     try:
+        # Safely extract zip with path traversal protection
         with zipfile.ZipFile('arc_companion_update.zip', 'r') as zip_ref:
+            # Validate all file paths before extraction
+            for file_info in zip_ref.infolist():
+                # Normalize path and check for directory traversal
+                file_path = os.path.normpath(os.path.join('.', file_info.filename))
+                if file_path.startswith('..' + os.sep) or os.path.isabs(file_info.filename):
+                    print(f"Suspicious file path in zip: {file_info.filename}")
+                    raise zipfile.BadZipFile("Zip contains unsafe file paths")
+            
+            # Extract to current directory
             zip_ref.extractall('.')
+        
+        # Clean up downloaded zip file
+        try:
+            os.remove('arc_companion_update.zip')
+        except OSError:
+            pass
+        
         print("Update extracted successfully.")
-    except zipfile.BadZipFile:
-        print("Error extracting update.")
+    except zipfile.BadZipFile as e:
+        print(f"Error extracting update: {e}")
+    except Exception as e:
+        print(f"Unexpected error during extraction: {e}")
     finally:
         # Proceed to launch the application
         root.after(0, launch_application)
@@ -110,11 +190,19 @@ def check_extract_thread(extract_thread):
 def launch_application():
     try:
         if os.path.isfile('arc_companion.exe'):
-            os.system('start arc_companion.exe')  # Use 'start' command for Windows
+            # Use subprocess instead of os.system for security
+            # On Windows, use subprocess with proper shell handling
+            if sys.platform == 'win32':
+                subprocess.Popen(['arc_companion.exe'], shell=False)
+            else:
+                # For other platforms, adjust accordingly
+                subprocess.Popen(['./arc_companion.exe'], shell=False)
         else:
             print("Executable not found.")
-    except Exception as e:
+    except subprocess.SubprocessError as e:
         print(f"Error launching application: {e}")
+    except Exception as e:
+        print(f"Unexpected error launching application: {e}")
 
     # Exit the updater
     if root:
